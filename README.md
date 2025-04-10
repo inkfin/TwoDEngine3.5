@@ -12,7 +12,7 @@ All game engine functionality is in plugins. Currently provided plugins support:
 * USB Input from keyboards, mice and game controllers
 * Bitfont (Anglecode) text rendering including kerning
 * Simple collision detectiuon using bounding circles
-* 
+*
 
 ## Research and Results
 This version is deliberately non-optimized. 
@@ -26,3 +26,9 @@ Further research will invovle tuning, execution parallelization and extended fun
 * Sound support
 * Porting to platforms besides Windows 
 
+
+## Plugins
+
+A XPBD 2d physics engine that supports sphere collision and rotation. Implemented in F# and uses tracy profiler to track its performance.
+
+[Paper link](https://www.dropbox.com/scl/fi/xcqhm61wb5j0x1r8cxn5v/F-PBD-engine.pdf?rlkey=fbxcb2u415op1eensob5hm71z&st=7un343gc&dl=0).
