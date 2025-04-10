@@ -25,6 +25,7 @@
         <Compile Include="AnimatedImage.fs" />
         <Compile Include="Player.fs" />
         <Compile Include="Asteroids.fs" />
+        <Compile Include="CollisionTestScene.fs" />
         <Compile Include="AsteroidsSG.fs" />
         <Compile Include="Program.fs" />
         <Folder Include="Plugins\" />

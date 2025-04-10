@@ -43,7 +43,6 @@ let main argv =
         |> Array.iter (fun t -> ManagerRegistry.addManager(t))
      )
     
-    Asteroids.Start()
+    // Asteroids.Start()
+    CollisionTestScene.Start()
     0 // return an integer exit code
-    
-   
