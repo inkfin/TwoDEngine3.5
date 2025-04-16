@@ -133,7 +133,7 @@ let Start() =
   
     // 从图集加载资源（此处使用同一个图集，可根据实际图片资源调整对应的区域）
     let atlas =
-        File.Open("Assets/ballCollisionTest.png", FileMode.Open)
+        File.Open("Assets/ballCollisionTest2 z.png", FileMode.Open)
         |> window.LoadImage
 
     // 假设图集中左上角区域为小球图片，尺寸44x44像素
