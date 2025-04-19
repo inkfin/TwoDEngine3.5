@@ -40,12 +40,27 @@ type Platform = {
 /// 物理参数
 let gravity = 0.001f
 let restitution = 0.8f
+let rollingFrictionCoefficient = 0.002f  // 滚动摩擦系数
+let staticFrictionCoefficient = 0.8f     // 静摩擦系数
+let kineticFrictionCoefficient = 0.4f    // 动摩擦系数
+let airDamping = 0.999f                  // 空气阻尼
+let maxVelocity = 10.0f                  // 最大速度
+let maxAngularVelocity = 5.0f            // 最大角速度
 
 // clamp 辅助函数
 let clamp (value: float32) (minVal: float32) (maxVal: float32) =
     if value < minVal then minVal
     elif value > maxVal then maxVal
     else value
+
+// 验证向量中是否有NaN或无穷大
+let isValidVector (v: Vector2) =
+    not (Single.IsNaN(v.X) || Single.IsNaN(v.Y) ||
+         Single.IsInfinity(v.X) || Single.IsInfinity(v.Y))
+
+// 验证并修复无效的向量
+let ensureValidVector (v: Vector2) (defaultValue: Vector2) =
+    if isValidVector v then v else defaultValue
 
 /// Ball 状态结构体（用于 PBD）
 type BallState = {
@@ -54,8 +69,14 @@ type BallState = {
     mutable p: Vector2
 }
 
+
+
 /// PBD 主求解函数
 let pbdSolveBalls (balls: Ball list) (platform: Platform) (dt: float32) (iterations: int) : Ball list =
+    let stopwatch = System.Diagnostics.Stopwatch.StartNew()
+
+    let dt = if dt > 100.0f then 16.0f else dt  // 防止过大的时间步长
+
     let stateArray =
         balls
         |> List.map (fun ball -> { ball = ball; oldPos = ball.pos; p = ball.pos + ball.vel * dt })
@@ -68,6 +89,8 @@ let pbdSolveBalls (balls: Ball list) (platform: Platform) (dt: float32) (iterati
     let top = platform.pos.Y - halfH
     let bottom = platform.pos.Y + halfH
 
+    let contactPoints = Array.create stateArray.Length None
+
     for _ in 1 .. iterations do
         // 小球与小球之间碰撞
         for i = 0 to stateArray.Length - 2 do
@@ -77,13 +100,11 @@ let pbdSolveBalls (balls: Ball list) (platform: Platform) (dt: float32) (iterati
                 let delta = s1.p - s2.p
                 let dist = delta.Length()
                 let minDist = s1.ball.radius + s2.ball.radius
-                if dist < minDist then
+                if dist < minDist && dist > 0.0001f then
                     let penetration = minDist - dist
-                    let correction =
-                        if dist > 0.0f then (delta / dist) * (penetration * 0.5f)
-                        else Vector2(penetration * 0.5f, 0.0f)
-                    stateArray.[i] <- { s1 with p = s1.p + correction }
-                    stateArray.[j] <- { s2 with p = s2.p - correction }
+                    let correction = (delta / dist) * (penetration * 0.5f)
+                    stateArray.[i] <- { s1 with p = ensureValidVector (s1.p + correction) s1.p }
+                    stateArray.[j] <- { s2 with p = ensureValidVector (s2.p - correction) s2.p }
 
         // 小球与平台之间碰撞
         for i = 0 to stateArray.Length - 1 do
@@ -93,22 +114,55 @@ let pbdSolveBalls (balls: Ball list) (platform: Platform) (dt: float32) (iterati
             let diff = s.p - Vector2(closestX, closestY)
             let diffLenSq = diff.LengthSquared()
             if diffLenSq < s.ball.radius * s.ball.radius then
-                let diffLen = if diffLenSq = 0.0f then 0.0f else MathF.Sqrt(diffLenSq)
+                let diffLen = if diffLenSq < 0.0001f then 0.0f else MathF.Sqrt(diffLenSq)
                 let penetration = s.ball.radius - diffLen
-                let normal = if diffLen = 0.0f then Vector2(0.0f, -1.0f) else diff / diffLen
-                stateArray.[i] <- { s with p = s.p + normal * penetration }
+                let normal = 
+                    if diffLen < 0.0001f then Vector2(0.0f, -1.0f)
+                    else diff / diffLen
+                let correction = normal * penetration
+                stateArray.[i] <- { s with p = ensureValidVector (s.p + correction) s.p }
+                contactPoints.[i] <- Some (Vector2(closestX, closestY), normal)
 
-    // 更新速度 + 旋转扰动（轻量化）
-    let random = System.Random()
+    let result =
+        stateArray
+        |> Array.mapi (fun i s ->
+            let oldPos = s.oldPos
+            let newPos = s.p
+            let newVel = 
+                if isValidVector newPos && isValidVector oldPos then
+                    let vel = (newPos - oldPos) / dt
+                    if vel.LengthSquared() > maxVelocity * maxVelocity then
+                        vel * (maxVelocity / vel.Length())
+                    else vel
+                else Vector2.Zero
+            
+            match contactPoints.[i] with
+            | Some (contactPoint, normal) ->
+                let idealAngularVel = 
+                    if abs newVel.X > 0.001f then
+                        newVel.X / s.ball.radius * (180.0f / MathF.PI)
+                    else 0.0f
 
-    stateArray
-    |> Array.map (fun s ->
-        let newVel = (s.p - s.oldPos) / dt
-        let moved = Vector2.DistanceSquared(s.p, s.oldPos) > 0.0001f
-        let angularImpulse = if moved then float32 (random.NextDouble() - 0.5) * 1.0f else 0.0f
-        { s.ball with pos = s.p; vel = newVel; angularVel = s.ball.angularVel + angularImpulse }
-    )
-    |> Array.toList
+                let newAngularVel =
+                    if abs newVel.X > 0.01f then
+                        let diff = idealAngularVel - s.ball.angularVel
+                        s.ball.angularVel + diff * 0.1f
+                    else
+                        s.ball.angularVel * (1.0f - rollingFrictionCoefficient)
+
+                let newAngularVel = clamp newAngularVel (-maxAngularVelocity) maxAngularVelocity
+
+                { s.ball with pos = newPos; vel = newVel; angularVel = newAngularVel }
+            | None ->
+                let newAngularVel = s.ball.angularVel * airDamping
+                { s.ball with pos = newPos; vel = newVel; angularVel = newAngularVel }
+        )
+        |> Array.toList
+
+    stopwatch.Stop()
+    printfn "[PBD Ticket] Loop time: %.3f ms" stopwatch.Elapsed.TotalMilliseconds
+    result
+
 
 /// 主循环入口
 let Start() =
@@ -170,27 +224,39 @@ let Start() =
                 lastTime <- currentTime
                 let deltaTime = float32 deltaMS
 
-                // 更新小球物理状态 + 带地面摩擦的角速度阻尼
+                // 更新小球物理状态
                 balls <-
                     balls
                     |> List.map (fun ball ->
                         let newVel = ball.vel + Vector2(0.0f, gravity * deltaTime)
-                        let newPos = ball.pos + newVel * deltaTime
-
-                        // 地面接触判断（简化）：底部贴近平台上沿
-                        let touchingPlatform =
-                            ball.pos.Y + ball.radius >= platform.pos.Y - (platform.height / 2.0f) - 1.0f
-
-                        // 旋转阻尼系数：在平台上更快衰减
-                        let damping = if touchingPlatform then 0.9f else 0.98f
-                        let newAngularVel = ball.angularVel * damping
-                        let newAngle = ball.angle + newAngularVel * deltaTime
-
-                        { ball with pos = newPos; vel = newVel; angle = newAngle; angularVel = newAngularVel }
+                        // 限制速度
+                        let newVel = 
+                            if newVel.LengthSquared() > maxVelocity * maxVelocity then
+                                newVel * (maxVelocity / newVel.Length())
+                            else
+                                newVel
+                        { ball with vel = newVel }
                     )
 
-                // 使用 PBD 更新约束响应
+                // 用 PBD 更新约束响应
                 balls <- pbdSolveBalls balls platform deltaTime 5
+
+                // 过滤掉超出屏幕范围的小球
+                balls <-
+                    balls
+                    |> List.filter (fun ball ->
+                        ball.pos.X >= -100.0f && ball.pos.X <= 600.0f &&
+                        ball.pos.Y >= -100.0f && ball.pos.Y <= 600.0f &&
+                        isValidVector ball.pos
+                    )
+
+                // 更新角度（使用角速度）
+                balls <-
+                    balls
+                    |> List.map (fun ball ->
+                        let newAngle = ball.angle + ball.angularVel * deltaTime
+                        { ball with angle = newAngle }
+                    )
 
                 // 绘制阶段
                 win.Clear (Color.Black)
@@ -211,7 +277,7 @@ let Start() =
                     win.DrawImage xform ball.img
                 )
 
-                let fpsStr = "fps: " + (1000 / deltaMS).ToString()
+                let fpsStr = sprintf "fps: %d | balls: %d" (1000 / deltaMS) (List.length balls)
                 font.MakeText fpsStr
                 |> fun txt -> txt.Draw win win.IdentityTransform
 
