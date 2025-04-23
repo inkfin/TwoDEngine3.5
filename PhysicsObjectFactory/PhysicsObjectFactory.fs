@@ -48,7 +48,7 @@ module Factory =
             img = img
         }
 
-    /// 批量生成小球对象，保证初始时不重叠（使用显式类型标注避免推断问题）
+    /// 批量生成小球对象，保证初始时不重叠
     let generateBalls (count: int) (img: Image) (minX: int) (maxX: int) (minY: int) (maxY: int) : Ball list =
         let diameter = float32 img.Size.X
         let radius = diameter / 2.0f

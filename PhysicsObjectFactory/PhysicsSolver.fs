@@ -36,8 +36,8 @@ module Solver =
         let state =
             balls
             |> List.map (fun b ->
-                let vel = b.vel + gravityForce
-                let predicted = b.pos + vel * dt
+                let vel = b.vel + gravityForce  // 应用重力后的新速度
+                let predicted = b.pos + vel * dt   // 用这个速度预测下一帧位置
                 (b, b.pos, predicted, vel)
             )
             |> Array.ofList
@@ -59,19 +59,19 @@ module Solver =
                     let delta = p1 - p2
                     let dist = delta.Length()
                     let minDist = b1.radius + b2.radius
-                    if dist < minDist && dist > 0.0001f then
+                    if dist < minDist && dist > 0.0001f then   //发生了重叠,将小球隔开保证距离
                         let correction = (delta / dist) * ((minDist - dist) * 0.5f)
                         let newP1 = ensureValidVector (p1 + correction) p1
                         let newP2 = ensureValidVector (p2 - correction) p2
                         state.[i] <- (b1, b1.pos, newP1, state.[i] |> fun (_,_,_,v) -> v)
                         state.[j] <- (b2, b2.pos, newP2, state.[j] |> fun (_,_,_,v) -> v)
 
-            for i = 0 to state.Length - 1 do
+            for i = 0 to state.Length - 1 do  //球与平台之间的重叠修复
                 let (b, oldPos, p, v) = state.[i]
                 let closestX = clamp p.X left right
                 let closestY = clamp p.Y top bottom
                 let diff = p - Vector2(closestX, closestY)
-                let lenSq = diff.LengthSquared()
+                let lenSq = diff.LengthSquared()    //判断是否重叠
                 if lenSq < b.radius * b.radius then
                     let len = if lenSq < 0.0001f then 0.0f else MathF.Sqrt(lenSq)
                     let penetration = b.radius - len
