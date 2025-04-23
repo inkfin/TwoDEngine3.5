@@ -27,6 +27,7 @@
         <Compile Include="Asteroids.fs" />
         <Compile Include="CollisionTestScene.fs" />
         <Compile Include="AsteroidsSG.fs" />
+        
         <Compile Include="Program.fs" />
         <Folder Include="Plugins\" />
     </ItemGroup>
@@ -40,6 +41,7 @@
         <ProjectReference Include="..\AngelCodeTextRenderer\AngelCodeTextRenderer.fsproj" />
         <ProjectReference Include="..\GraphicsManagerSFML\GraphicsManagerSFML.fsproj" />
         <ProjectReference Include="..\InputManagerWinRawInput\InputManagerWinRawInput.fsproj" />
+        <ProjectReference Include="..\PhysicsObjectFactory\PhysicsObjectFactory.fsproj" />
         <ProjectReference Include="..\SimpleCollisionManager\SimpleCollisionManager.fsproj" />
     </ItemGroup>
 
