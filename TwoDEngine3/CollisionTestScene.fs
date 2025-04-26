@@ -19,26 +19,26 @@ open Player
 
 open TracyProfiler
 
-/// 主函数入口
+/// Main entry point
 let Start() =
-    // 获取各个引擎模块
+    // Retrieve engine modules
     let graphics = ManagerUtils.TryGetManager<GraphicsManager> ()
     let textRenderer = ManagerUtils.TryGetManager<TextManager> ()
     let inputManager = ManagerUtils.TryGetManager<InputDeviceInterface> ()
 
-    // 显式注解 Window 类型，避免类型推断错误
+    // Explicitly annotate Window type to avoid type inference errors
     let window: Window = graphics.OpenWindow (Windowed (800u, 600u)) "Collision Test Scene"
 
-    // 加载纹理图集资源
+    // Load texture atlas resource
     let atlas = File.Open("Assets/ballCollisionTest2.png", FileMode.Open) |> window.LoadImage
-    let ballImg = atlas.SubImage (Rectangle(Point(0, 0), Size(44, 44)))         // 小球子图
-    let platformImg = Some (atlas.SubImage (Rectangle(Point(0, 480), Size(500, 20)))) // 平台图
-    let font = textRenderer.LoadFont window "Assets/Basic.fnt"                 // 字体资源
+    let ballImg = atlas.SubImage (Rectangle(Point(0, 0), Size(44, 44)))         // Ball sub-image
+    let platformImg = Some (atlas.SubImage (Rectangle(Point(0, 480), Size(500, 20)))) // Platform image
+    let font = textRenderer.LoadFont window "Assets/Basic.fnt"                 // Font resource
 
-    // 初始化平台对象，调用外部模块生成
+    // Initialize platform object using external module
     let platform = generatePlatform 250.0f 490.0f 500.0f 20.0f platformImg
 
-    // 设置小球生成参数并调用工厂方法
+    // Set ball generation parameters and call factory method
     let ballCount = 10
     let ballMinX, ballMaxX = 100, 400
     let ballMinY, ballMaxY = 50, 200
@@ -46,7 +46,7 @@ let Start() =
 
     let mutable lastTime = DateTime.Now
 
-    /// 主逻辑循环，更新场景并绘制
+    /// Main logic loop: update scene and render
     let rec logic (window: Window) =
         if window.IsOpen() && not (Key.IsKeyDown Key.ESC) then
             let currentTime = DateTime.Now
@@ -58,16 +58,16 @@ let Start() =
 
                 do
                     use _ = Profiler.BeginEvent("Physics Update")
-                    // 每帧调用物理求解器进行碰撞模拟和旋转更新
+                    // Call physics solver each frame for collision simulation and rotation update
                     balls <- solve balls platform dt 5
 
                 do
                     use _ = Profiler.BeginEvent("Render")
 
-                    // 清除上一帧图像
+                    // Clear previous frame image
                     window.Clear(Color.Black)
 
-                    // 绘制平台
+                    // Draw platform
                     match platform.img with
                     | Some img ->
                         let offsetX = float32 -img.Size.X / 2.0f
@@ -78,7 +78,7 @@ let Start() =
                         window.DrawImage xform img
                     | None -> ()
 
-                    // 绘制所有小球（包含旋转角度）
+                    // Draw all balls (including rotation angle)
                     balls |> List.iter (fun ball ->
                         let offsetX = float32 -ball.img.Size.X / 2.0f
                         let offsetY = float32 -ball.img.Size.Y / 2.0f
@@ -89,7 +89,7 @@ let Start() =
                         window.DrawImage xform ball.img
                     )
 
-                    // 显示帧率信息
+                    // Display FPS information
                     let fpsText = sprintf "FPS: %d | Balls: %d" (1000 / deltaMS) balls.Length
                     font.MakeText fpsText
                     |> fun t -> t.Draw window window.IdentityTransform
@@ -99,6 +99,6 @@ let Start() =
             Profiler.ProfileFrame("main_loop")
             logic window
 
-    // 启动窗口逻辑循环
+    // Start window logic loop
     window.Start(logic)
     Profiler.Dispose()

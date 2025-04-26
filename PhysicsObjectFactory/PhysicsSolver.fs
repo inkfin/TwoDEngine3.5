@@ -7,42 +7,42 @@ open PhysicsObjectFactory
 
 module Solver =
 
-    // 物理参数定义
-    let gravity = 0.001f                          // 重力加速度（单位: px/ms²）
-    let restitution = 0.8f                        // 弹性系数
-    let airDamping = 0.999f                       // 空气阻尼
-    let maxVelocity = 10.0f                       // 最大线速度限制
-    let maxAngularVelocity = 5.0f                 // 最大角速度限制
-    let rollingFrictionCoefficient = 0.002f       // 滚动摩擦系数
-    let staticFrictionThreshold = 0.02f           // 静摩擦阈值：低于这个速度将被视为完全静止
+    // Define physics parameters
+    let gravity = 0.001f                          // Gravitational acceleration (unit: px/ms²)
+    let restitution = 0.8f                        // Coefficient of restitution
+    let airDamping = 0.999f                       // Air damping
+    let maxVelocity = 10.0f                       // Maximum linear velocity
+    let maxAngularVelocity = 5.0f                 // Maximum angular velocity
+    let rollingFrictionCoefficient = 0.002f       // Rolling friction coefficient
+    let staticFrictionThreshold = 0.02f           // Static friction threshold: speeds below this are considered stationary
 
-    // 向量有效性检查
+    // Check if a vector is valid
     let isValidVector (v: Vector2) =
         not (Single.IsNaN(v.X) || Single.IsNaN(v.Y) || Single.IsInfinity(v.X) || Single.IsInfinity(v.Y))
 
-    // 确保向量有效，若无效则返回备用值
+    // Ensure vector validity; if invalid, return fallback value
     let ensureValidVector (v: Vector2) (fallback: Vector2) =
         if isValidVector v then v else fallback
 
-    // 限制数值在范围内
+    // Clamp value within a specified range
     let clamp (v: float32) (minVal: float32) (maxVal: float32) =
         if v < minVal then minVal elif v > maxVal then maxVal else v
 
-    /// 主物理求解函数
+    /// Main physics solver function
     let solve (balls: Ball list) (platform: Platform) (dt: float32) (iterations: int) : Ball list =
         let gravityForce = Vector2(0.0f, gravity * dt)
 
-        // 初始化状态数组：每个元素是 (球, 旧位置, 预测位置, 当前速度)
+        // Initialize state array: each element is (ball, old position, predicted position, current velocity)
         let state =
             balls
             |> List.map (fun b ->
-                let vel = b.vel + gravityForce  // 应用重力后的新速度
-                let predicted = b.pos + vel * dt   // 用这个速度预测下一帧位置
+                let vel = b.vel + gravityForce  // Apply gravity to velocity
+                let predicted = b.pos + vel * dt   // Predict next position using new velocity
                 (b, b.pos, predicted, vel)
             )
             |> Array.ofList
 
-        // 平台边界计算
+        // Calculate platform boundaries
         let halfW = platform.width / 2.0f
         let halfH = platform.height / 2.0f
         let left = platform.pos.X - halfW
@@ -50,7 +50,7 @@ module Solver =
         let top = platform.pos.Y - halfH
         let bottom = platform.pos.Y + halfH
 
-        // 约束迭代：处理球与球、球与平台之间的重叠修复
+        // Constraint iterations: resolve ball-ball and ball-platform overlaps
         for _ in 1 .. iterations do
             for i = 0 to state.Length - 2 do
                 for j = i + 1 to state.Length - 1 do
@@ -59,19 +59,19 @@ module Solver =
                     let delta = p1 - p2
                     let dist = delta.Length()
                     let minDist = b1.radius + b2.radius
-                    if dist < minDist && dist > 0.0001f then   //发生了重叠,将小球隔开保证距离
+                    if dist < minDist && dist > 0.0001f then   // Overlapping detected, separate the balls
                         let correction = (delta / dist) * ((minDist - dist) * 0.5f)
                         let newP1 = ensureValidVector (p1 + correction) p1
                         let newP2 = ensureValidVector (p2 - correction) p2
                         state.[i] <- (b1, b1.pos, newP1, state.[i] |> fun (_,_,_,v) -> v)
                         state.[j] <- (b2, b2.pos, newP2, state.[j] |> fun (_,_,_,v) -> v)
 
-            for i = 0 to state.Length - 1 do  //球与平台之间的重叠修复
+            for i = 0 to state.Length - 1 do  // Resolve ball-platform overlaps
                 let (b, oldPos, p, v) = state.[i]
                 let closestX = clamp p.X left right
                 let closestY = clamp p.Y top bottom
                 let diff = p - Vector2(closestX, closestY)
-                let lenSq = diff.LengthSquared()    //判断是否重叠
+                let lenSq = diff.LengthSquared()    // Check for overlap
                 if lenSq < b.radius * b.radius then
                     let len = if lenSq < 0.0001f then 0.0f else MathF.Sqrt(lenSq)
                     let penetration = b.radius - len
@@ -80,7 +80,7 @@ module Solver =
                     let newP = ensureValidVector (p + correction) p
                     state.[i] <- (b, oldPos, newP, v)
 
-        // 根据修正后的位置计算新速度、角速度与旋转角度
+        // Calculate new velocities, angular velocities, and angles based on corrected positions
         let updated =
             state
             |> Array.map (fun (b, oldP, newP, _) ->
@@ -94,14 +94,14 @@ module Solver =
                 let newAngularVel =
                     if abs newVelClamped.X > 0.01f then
                         let diff = tangentVel - b.angularVel
-                        b.angularVel + diff * 0.1f // 模拟滑动摩擦导致旋转
+                        b.angularVel + diff * 0.1f // Simulate sliding friction causing rotation
                     else
                         b.angularVel * (1.0f - rollingFrictionCoefficient)
 
                 let newAngularVel = clamp newAngularVel (-maxAngularVelocity) maxAngularVelocity
                 let newAngle = b.angle + newAngularVel * dt
 
-                // 应用静摩擦：速度非常小时彻底静止
+                // Apply static friction: completely stop when velocity is very low
                 let finalVel = if newVelClamped.Length() < staticFrictionThreshold then Vector2.Zero else newVelClamped
                 let finalAngularVel = if abs newVelClamped.X < staticFrictionThreshold then 0.0f else newAngularVel
 
