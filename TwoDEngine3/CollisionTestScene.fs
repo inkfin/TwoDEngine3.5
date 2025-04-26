@@ -8,280 +8,97 @@ open AngelCodeTextRenderer
 open ImageExtensions
 open InputManagerWinRawInput
 open GraphicsManagerSFML
-open TDE3ManagerInterfaces.CollisionManagerInterface
 open TDE3ManagerInterfaces.InputDevices
 open TDE3ManagerInterfaces.GraphicsManagerInterface
 open TDE3ManagerInterfaces.TextRendererInterfaces
+open TDE3ManagerInterfaces.CollisionManagerInterface
+open PhysicsObjectFactory
+open PhysicsObjectFactory.Factory
+open PhysicsSolver.Solver
 open Player
 
-// 用于产生随机数和生成随机浮点数
-let globalRandom = System.Random()
-let RandomFloat (low: float) (high: float) =
-    globalRandom.NextDouble() * (high - low) + low
+open TracyProfiler
 
-/// 定义小球类型（含旋转信息）
-type Ball = {
-    pos: Vector2
-    vel: Vector2
-    radius: float32
-    img: Image
-    angle: float32        // 当前旋转角度（度）
-    angularVel: float32   // 当前角速度（度/ms）
-}
-
-/// 平台类型
-type Platform = {
-    pos: Vector2
-    width: float32
-    height: float32
-    img: Image option
-}
-
-/// 物理参数
-let gravity = 0.001f
-let restitution = 0.8f
-let rollingFrictionCoefficient = 0.002f  // 滚动摩擦系数
-let staticFrictionCoefficient = 0.8f     // 静摩擦系数
-let kineticFrictionCoefficient = 0.4f    // 动摩擦系数
-let airDamping = 0.999f                  // 空气阻尼
-let maxVelocity = 10.0f                  // 最大速度
-let maxAngularVelocity = 5.0f            // 最大角速度
-
-// clamp 辅助函数
-let clamp (value: float32) (minVal: float32) (maxVal: float32) =
-    if value < minVal then minVal
-    elif value > maxVal then maxVal
-    else value
-
-// 验证向量中是否有NaN或无穷大
-let isValidVector (v: Vector2) =
-    not (Single.IsNaN(v.X) || Single.IsNaN(v.Y) ||
-         Single.IsInfinity(v.X) || Single.IsInfinity(v.Y))
-
-// 验证并修复无效的向量
-let ensureValidVector (v: Vector2) (defaultValue: Vector2) =
-    if isValidVector v then v else defaultValue
-
-/// Ball 状态结构体（用于 PBD）
-type BallState = {
-    ball: Ball
-    oldPos: Vector2
-    mutable p: Vector2
-}
-
-
-
-/// PBD 主求解函数
-let pbdSolveBalls (balls: Ball list) (platform: Platform) (dt: float32) (iterations: int) : Ball list =
-    let stopwatch = System.Diagnostics.Stopwatch.StartNew()
-
-    let dt = if dt > 100.0f then 16.0f else dt  // 防止过大的时间步长
-
-    let stateArray =
-        balls
-        |> List.map (fun ball -> { ball = ball; oldPos = ball.pos; p = ball.pos + ball.vel * dt })
-        |> Array.ofList
-
-    let halfW = platform.width / 2.0f
-    let halfH = platform.height / 2.0f
-    let left = platform.pos.X - halfW
-    let right = platform.pos.X + halfW
-    let top = platform.pos.Y - halfH
-    let bottom = platform.pos.Y + halfH
-
-    let contactPoints = Array.create stateArray.Length None
-
-    for _ in 1 .. iterations do
-        // 小球与小球之间碰撞
-        for i = 0 to stateArray.Length - 2 do
-            for j = i + 1 to stateArray.Length - 1 do
-                let s1 = stateArray.[i]
-                let s2 = stateArray.[j]
-                let delta = s1.p - s2.p
-                let dist = delta.Length()
-                let minDist = s1.ball.radius + s2.ball.radius
-                if dist < minDist && dist > 0.0001f then
-                    let penetration = minDist - dist
-                    let correction = (delta / dist) * (penetration * 0.5f)
-                    stateArray.[i] <- { s1 with p = ensureValidVector (s1.p + correction) s1.p }
-                    stateArray.[j] <- { s2 with p = ensureValidVector (s2.p - correction) s2.p }
-
-        // 小球与平台之间碰撞
-        for i = 0 to stateArray.Length - 1 do
-            let s = stateArray.[i]
-            let closestX = clamp s.p.X left right
-            let closestY = clamp s.p.Y top bottom
-            let diff = s.p - Vector2(closestX, closestY)
-            let diffLenSq = diff.LengthSquared()
-            if diffLenSq < s.ball.radius * s.ball.radius then
-                let diffLen = if diffLenSq < 0.0001f then 0.0f else MathF.Sqrt(diffLenSq)
-                let penetration = s.ball.radius - diffLen
-                let normal = 
-                    if diffLen < 0.0001f then Vector2(0.0f, -1.0f)
-                    else diff / diffLen
-                let correction = normal * penetration
-                stateArray.[i] <- { s with p = ensureValidVector (s.p + correction) s.p }
-                contactPoints.[i] <- Some (Vector2(closestX, closestY), normal)
-
-    let result =
-        stateArray
-        |> Array.mapi (fun i s ->
-            let oldPos = s.oldPos
-            let newPos = s.p
-            let newVel = 
-                if isValidVector newPos && isValidVector oldPos then
-                    let vel = (newPos - oldPos) / dt
-                    if vel.LengthSquared() > maxVelocity * maxVelocity then
-                        vel * (maxVelocity / vel.Length())
-                    else vel
-                else Vector2.Zero
-            
-            match contactPoints.[i] with
-            | Some (contactPoint, normal) ->
-                let idealAngularVel = 
-                    if abs newVel.X > 0.001f then
-                        newVel.X / s.ball.radius * (180.0f / MathF.PI)
-                    else 0.0f
-
-                let newAngularVel =
-                    if abs newVel.X > 0.01f then
-                        let diff = idealAngularVel - s.ball.angularVel
-                        s.ball.angularVel + diff * 0.1f
-                    else
-                        s.ball.angularVel * (1.0f - rollingFrictionCoefficient)
-
-                let newAngularVel = clamp newAngularVel (-maxAngularVelocity) maxAngularVelocity
-
-                { s.ball with pos = newPos; vel = newVel; angularVel = newAngularVel }
-            | None ->
-                let newAngularVel = s.ball.angularVel * airDamping
-                { s.ball with pos = newPos; vel = newVel; angularVel = newAngularVel }
-        )
-        |> Array.toList
-
-    stopwatch.Stop()
-    printfn "[PBD Ticket] Loop time: %.3f ms" stopwatch.Elapsed.TotalMilliseconds
-    result
-
-
-/// 主循环入口
+/// Main entry point
 let Start() =
+    // Retrieve engine modules
     let graphics = ManagerUtils.TryGetManager<GraphicsManager> ()
     let textRenderer = ManagerUtils.TryGetManager<TextManager> ()
-    let inputDeviceManager = ManagerUtils.TryGetManager<InputDeviceInterface> ()
+    let inputManager = ManagerUtils.TryGetManager<InputDeviceInterface> ()
 
-    let window = graphics.OpenWindow (Windowed (500u,500u)) "2D Physics with Rotation + Friction"
+    // Explicitly annotate Window type to avoid type inference errors
+    let window: Window = graphics.OpenWindow (Windowed (800u, 600u)) "Collision Test Scene"
 
-    let atlas =
-        File.Open("Assets/ballCollisionTest2.png", FileMode.Open)
-        |> window.LoadImage
+    // Load texture atlas resource
+    let atlas = File.Open("Assets/ballCollisionTest2.png", FileMode.Open) |> window.LoadImage
+    let ballImg = atlas.SubImage (Rectangle(Point(0, 0), Size(44, 44)))         // Ball sub-image
+    let platformImg = Some (atlas.SubImage (Rectangle(Point(0, 480), Size(500, 20)))) // Platform image
+    let font = textRenderer.LoadFont window "Assets/Basic.fnt"                 // Font resource
 
-    let ballImage =
-        atlas.SubImage (Rectangle(Point(0, 0), Size(44, 44)))
+    // Initialize platform object using external module
+    let platform = generatePlatform 250.0f 490.0f 500.0f 20.0f platformImg
 
-    let platformImage =
-        Some (atlas.SubImage (Rectangle(Point(0, 480), Size(500, 20))))
-
-    let font = textRenderer.LoadFont window "Assets/Basic.fnt"
-
-    let platform = {
-        pos = Vector2(250.0f, 490.0f)
-        width = 500.0f
-        height = 20.0f
-        img = platformImage
-    }
-
+    // Set ball generation parameters and call factory method
     let ballCount = 10
-    let minX, maxX = 100, 400
-    let minY, maxY = 50, 200
-    let diameter = 44.0f
+    let ballMinX, ballMaxX = 100, 400
+    let ballMinY, ballMaxY = 50, 200
+    let mutable balls = generateBalls ballCount ballImg ballMinX ballMaxX ballMinY ballMaxY
 
-    let rec generateBalls count (existing: Ball list) =
-        if count <= 0 then existing
-        else
-            let candidatePos = Vector2(float32(globalRandom.Next(minX, maxX)), float32(globalRandom.Next(minY, maxY)))
-            let collides = existing |> List.exists (fun ball -> Vector2.Distance(ball.pos, candidatePos) < diameter)
-            if collides then generateBalls count existing
-            else
-                let newBall = {
-                    pos = candidatePos
-                    vel = Vector2(0.0f, 0.0f)
-                    radius = 22.0f
-                    img = ballImage
-                    angle = 0.0f
-                    angularVel = 0.0f
-                }
-                generateBalls (count - 1) (newBall :: existing)
-
-    let mutable balls = generateBalls ballCount []
     let mutable lastTime = DateTime.Now
 
-    let rec logic (win: Window) =
-        if win.IsOpen() && not (Key.IsKeyDown Key.ESC) then
+    /// Main logic loop: update scene and render
+    let rec logic (window: Window) =
+        if window.IsOpen() && not (Key.IsKeyDown Key.ESC) then
             let currentTime = DateTime.Now
             let deltaMS = (currentTime - lastTime).Milliseconds
+
             if deltaMS > 10 then
                 lastTime <- currentTime
-                let deltaTime = float32 deltaMS
+                let dt = float32 deltaMS
 
-                // 更新小球物理状态
-                balls <-
-                    balls
-                    |> List.map (fun ball ->
-                        let newVel = ball.vel + Vector2(0.0f, gravity * deltaTime)
-                        // 限制速度
-                        let newVel = 
-                            if newVel.LengthSquared() > maxVelocity * maxVelocity then
-                                newVel * (maxVelocity / newVel.Length())
-                            else
-                                newVel
-                        { ball with vel = newVel }
+                do
+                    use _ = Profiler.BeginEvent("Physics Update")
+                    // Call physics solver each frame for collision simulation and rotation update
+                    balls <- solve balls platform dt 5
+
+                do
+                    use _ = Profiler.BeginEvent("Render")
+
+                    // Clear previous frame image
+                    window.Clear(Color.Black)
+
+                    // Draw platform
+                    match platform.img with
+                    | Some img ->
+                        let offsetX = float32 -img.Size.X / 2.0f
+                        let offsetY = float32 -img.Size.Y / 2.0f
+                        let xform =
+                            window.TranslationTransform platform.pos.X platform.pos.Y
+                            |> fun t -> t.Multiply (window.TranslationTransform offsetX offsetY)
+                        window.DrawImage xform img
+                    | None -> ()
+
+                    // Draw all balls (including rotation angle)
+                    balls |> List.iter (fun ball ->
+                        let offsetX = float32 -ball.img.Size.X / 2.0f
+                        let offsetY = float32 -ball.img.Size.Y / 2.0f
+                        let xform =
+                            window.TranslationTransform ball.pos.X ball.pos.Y
+                            |> fun t -> t.Multiply (window.RotationTransform ball.angle)
+                            |> fun t -> t.Multiply (window.TranslationTransform offsetX offsetY)
+                        window.DrawImage xform ball.img
                     )
 
-                // 用 PBD 更新约束响应
-                balls <- pbdSolveBalls balls platform deltaTime 5
+                    // Display FPS information
+                    let fpsText = sprintf "FPS: %d | Balls: %d" (1000 / deltaMS) balls.Length
+                    font.MakeText fpsText
+                    |> fun t -> t.Draw window window.IdentityTransform
 
-                // 过滤掉超出屏幕范围的小球
-                balls <-
-                    balls
-                    |> List.filter (fun ball ->
-                        ball.pos.X >= -100.0f && ball.pos.X <= 600.0f &&
-                        ball.pos.Y >= -100.0f && ball.pos.Y <= 600.0f &&
-                        isValidVector ball.pos
-                    )
+                    window.Show()
 
-                // 更新角度（使用角速度）
-                balls <-
-                    balls
-                    |> List.map (fun ball ->
-                        let newAngle = ball.angle + ball.angularVel * deltaTime
-                        { ball with angle = newAngle }
-                    )
+            Profiler.ProfileFrame("main_loop")
+            logic window
 
-                // 绘制阶段
-                win.Clear (Color.Black)
-
-                match platform.img with
-                | Some img ->
-                    let xform =
-                        win.TranslationTransform platform.pos.X platform.pos.Y
-                        |> fun t -> t.Multiply (win.TranslationTransform (-img.Size.X / 2.0f) (-img.Size.Y / 2.0f))
-                    win.DrawImage xform img
-                | None -> ()
-
-                balls |> List.iter (fun ball ->
-                    let xform =
-                        win.TranslationTransform ball.pos.X ball.pos.Y
-                        |> fun t -> t.Multiply (win.RotationTransform ball.angle)
-                        |> fun t -> t.Multiply (win.TranslationTransform (-ball.img.Size.X / 2.0f) (-ball.img.Size.Y / 2.0f))
-                    win.DrawImage xform ball.img
-                )
-
-                let fpsStr = sprintf "fps: %d | balls: %d" (1000 / deltaMS) (List.length balls)
-                font.MakeText fpsStr
-                |> fun txt -> txt.Draw win win.IdentityTransform
-
-            win.Show()
-            logic win
-
+    // Start window logic loop
     window.Start(logic)
+    Profiler.Dispose()
