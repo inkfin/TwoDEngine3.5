@@ -20,6 +20,9 @@
         <Content Include="Assets\Basic_0.tga">
           <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </Content>
+        <Content Include="Assets\ballCollisionTest2.png">
+          <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
         <Compile Include="ManagerUtils.fs" />
         <Compile Include="NewtonianObject.fs" />
         <Compile Include="AnimatedImage.fs" />

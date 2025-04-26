@@ -17,6 +17,8 @@ open PhysicsObjectFactory.Factory
 open PhysicsSolver.Solver
 open Player
 
+open TracyProfiler
+
 /// 主函数入口
 let Start() =
     // 获取各个引擎模块
@@ -54,42 +56,49 @@ let Start() =
                 lastTime <- currentTime
                 let dt = float32 deltaMS
 
-                // 每帧调用物理求解器进行碰撞模拟和旋转更新
-                balls <- solve balls platform dt 5
+                do
+                    use _ = Profiler.BeginEvent("Physics Update")
+                    // 每帧调用物理求解器进行碰撞模拟和旋转更新
+                    balls <- solve balls platform dt 5
 
-                // 清除上一帧图像
-                window.Clear(Color.Black)
+                do
+                    use _ = Profiler.BeginEvent("Render")
 
-                // 绘制平台
-                match platform.img with
-                | Some img ->
-                    let offsetX = float32 -img.Size.X / 2.0f
-                    let offsetY = float32 -img.Size.Y / 2.0f
-                    let xform =
-                        window.TranslationTransform platform.pos.X platform.pos.Y
-                        |> fun t -> t.Multiply (window.TranslationTransform offsetX offsetY)
-                    window.DrawImage xform img
-                | None -> ()
+                    // 清除上一帧图像
+                    window.Clear(Color.Black)
 
-                // 绘制所有小球（包含旋转角度）
-                balls |> List.iter (fun ball ->
-                    let offsetX = float32 -ball.img.Size.X / 2.0f
-                    let offsetY = float32 -ball.img.Size.Y / 2.0f
-                    let xform =
-                        window.TranslationTransform ball.pos.X ball.pos.Y
-                        |> fun t -> t.Multiply (window.RotationTransform ball.angle)
-                        |> fun t -> t.Multiply (window.TranslationTransform offsetX offsetY)
-                    window.DrawImage xform ball.img
-                )
+                    // 绘制平台
+                    match platform.img with
+                    | Some img ->
+                        let offsetX = float32 -img.Size.X / 2.0f
+                        let offsetY = float32 -img.Size.Y / 2.0f
+                        let xform =
+                            window.TranslationTransform platform.pos.X platform.pos.Y
+                            |> fun t -> t.Multiply (window.TranslationTransform offsetX offsetY)
+                        window.DrawImage xform img
+                    | None -> ()
 
-                // 显示帧率信息
-                let fpsText = sprintf "FPS: %d | Balls: %d" (1000 / deltaMS) balls.Length
-                font.MakeText fpsText
-                |> fun t -> t.Draw window window.IdentityTransform
+                    // 绘制所有小球（包含旋转角度）
+                    balls |> List.iter (fun ball ->
+                        let offsetX = float32 -ball.img.Size.X / 2.0f
+                        let offsetY = float32 -ball.img.Size.Y / 2.0f
+                        let xform =
+                            window.TranslationTransform ball.pos.X ball.pos.Y
+                            |> fun t -> t.Multiply (window.RotationTransform ball.angle)
+                            |> fun t -> t.Multiply (window.TranslationTransform offsetX offsetY)
+                        window.DrawImage xform ball.img
+                    )
 
-                window.Show()
+                    // 显示帧率信息
+                    let fpsText = sprintf "FPS: %d | Balls: %d" (1000 / deltaMS) balls.Length
+                    font.MakeText fpsText
+                    |> fun t -> t.Draw window window.IdentityTransform
 
+                    window.Show()
+
+            Profiler.ProfileFrame("main_loop")
             logic window
 
     // 启动窗口逻辑循环
     window.Start(logic)
+    Profiler.Dispose()

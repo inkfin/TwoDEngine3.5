@@ -23,6 +23,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RawInputLight", "..\RawInpu
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "PhysicsObjectFactory", "PhysicsObjectFactory\PhysicsObjectFactory.fsproj", "{C42FBEC5-B68B-484C-9F1E-78EC065F81FE}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TracyProfiler", "TracyProfiler\TracyProfiler.csproj", "{240C3D9B-D1C7-4DAE-A957-8726F1B945D1}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -90,6 +92,12 @@ Global
 		{C42FBEC5-B68B-484C-9F1E-78EC065F81FE}.Release|Any CPU.Build.0 = Release|Any CPU
 		{C42FBEC5-B68B-484C-9F1E-78EC065F81FE}.DebugWindows|Any CPU.ActiveCfg = Debug|Any CPU
 		{C42FBEC5-B68B-484C-9F1E-78EC065F81FE}.DebugWindows|Any CPU.Build.0 = Debug|Any CPU
+		{240C3D9B-D1C7-4DAE-A957-8726F1B945D1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{240C3D9B-D1C7-4DAE-A957-8726F1B945D1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{240C3D9B-D1C7-4DAE-A957-8726F1B945D1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{240C3D9B-D1C7-4DAE-A957-8726F1B945D1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{240C3D9B-D1C7-4DAE-A957-8726F1B945D1}.DebugWindows|Any CPU.ActiveCfg = Debug|Any CPU
+		{240C3D9B-D1C7-4DAE-A957-8726F1B945D1}.DebugWindows|Any CPU.Build.0 = Debug|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

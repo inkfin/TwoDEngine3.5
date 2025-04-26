@@ -12,6 +12,7 @@
 
     <ItemGroup>
       <ProjectReference Include="..\TDE3ManagerInterfaces\TDE3ManagerInterfaces.fsproj" />
+      <ProjectReference Include="..\TracyProfiler\TracyProfiler.csproj" />
     </ItemGroup>
 
 </Project>
