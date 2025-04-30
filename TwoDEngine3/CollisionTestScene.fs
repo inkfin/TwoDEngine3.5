@@ -26,14 +26,14 @@ let Start() =
 
     let atlas = File.Open("Assets/ballCollisionTest4.png", FileMode.Open) |> window.LoadImage
     let ballImg = atlas.SubImage (Rectangle(Point(66, 17), Size(10, 10)))
-    let platformImg = Some (atlas.SubImage (Rectangle(Point(0, 480), Size(500, 20))))
+    let platformImg = Some (atlas.SubImage (Rectangle(Point(0, 480), Size(800, 20))))
     let font = textRenderer.LoadFont window "Assets/Basic.fnt"
 
-    let platform = generatePlatform 250.0f 490.0f 500.0f 20.0f platformImg
+    let platform = generatePlatform 250.0f 490.0f 800.0f 20.0f platformImg
 
-    let ballCount = 100
-    let ballMinX, ballMaxX = 100, 400
-    let ballMinY, ballMaxY = 50, 200
+    let ballCount = 300
+    let ballMinX, ballMaxX = 0, 400
+    let ballMinY, ballMaxY = 50, 400
     let mutable balls = generateBalls ballCount ballImg ballMinX ballMaxX ballMinY ballMaxY
 
     // Create solver plugin instance
