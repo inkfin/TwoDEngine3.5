@@ -14,60 +14,49 @@ open TDE3ManagerInterfaces.TextRendererInterfaces
 open TDE3ManagerInterfaces.CollisionManagerInterface
 open PhysicsObjectFactory
 open PhysicsObjectFactory.Factory
-open PhysicsSolver.Solver
+open PhysicsSolver
 open Player
-
 open TracyProfiler
 
-/// Main entry point
 let Start() =
-    // Retrieve engine modules
     let graphics = ManagerUtils.TryGetManager<GraphicsManager> ()
     let textRenderer = ManagerUtils.TryGetManager<TextManager> ()
     let inputManager = ManagerUtils.TryGetManager<InputDeviceInterface> ()
-
-    // Explicitly annotate Window type to avoid type inference errors
     let window: Window = graphics.OpenWindow (Windowed (800u, 600u)) "Collision Test Scene"
 
-    // Load texture atlas resource
-    let atlas = File.Open("Assets/ballCollisionTest2.png", FileMode.Open) |> window.LoadImage
-    let ballImg = atlas.SubImage (Rectangle(Point(0, 0), Size(44, 44)))         // Ball sub-image
-    let platformImg = Some (atlas.SubImage (Rectangle(Point(0, 480), Size(500, 20)))) // Platform image
-    let font = textRenderer.LoadFont window "Assets/Basic.fnt"                 // Font resource
+    let atlas = File.Open("Assets/ballCollisionTest4.png", FileMode.Open) |> window.LoadImage
+    let ballImg = atlas.SubImage (Rectangle(Point(66, 17), Size(10, 10)))
+    let platformImg = Some (atlas.SubImage (Rectangle(Point(0, 480), Size(500, 20))))
+    let font = textRenderer.LoadFont window "Assets/Basic.fnt"
 
-    // Initialize platform object using external module
     let platform = generatePlatform 250.0f 490.0f 500.0f 20.0f platformImg
 
-    // Set ball generation parameters and call factory method
-    let ballCount = 10
+    let ballCount = 100
     let ballMinX, ballMaxX = 100, 400
     let ballMinY, ballMaxY = 50, 200
     let mutable balls = generateBalls ballCount ballImg ballMinX ballMaxX ballMinY ballMaxY
 
+    // Create solver plugin instance
+    let solver: ISolver = new FixedStepSolver(fixedDt = 0.005f, maxSteps = 1000, iterations = 5) :> ISolver
+
     let mutable lastTime = DateTime.Now
 
-    /// Main logic loop: update scene and render
     let rec logic (window: Window) =
         if window.IsOpen() && not (Key.IsKeyDown Key.ESC) then
             let currentTime = DateTime.Now
-            let deltaMS = (currentTime - lastTime).Milliseconds
+            let delta = currentTime - lastTime
 
-            if deltaMS > 10 then
+            if delta.TotalMilliseconds > 10.0 then
                 lastTime <- currentTime
-                let dt = float32 deltaMS
-
+                let dt = float32 delta.TotalSeconds
                 do
                     use _ = Profiler.BeginEvent("Physics Update")
-                    // Call physics solver each frame for collision simulation and rotation update
-                    balls <- solve balls platform dt 5
+                    balls <- solver.Step balls platform dt
 
                 do
                     use _ = Profiler.BeginEvent("Render")
-
-                    // Clear previous frame image
                     window.Clear(Color.Black)
 
-                    // Draw platform
                     match platform.img with
                     | Some img ->
                         let offsetX = float32 -img.Size.X / 2.0f
@@ -78,7 +67,6 @@ let Start() =
                         window.DrawImage xform img
                     | None -> ()
 
-                    // Draw all balls (including rotation angle)
                     balls |> List.iter (fun ball ->
                         let offsetX = float32 -ball.img.Size.X / 2.0f
                         let offsetY = float32 -ball.img.Size.Y / 2.0f
@@ -89,8 +77,7 @@ let Start() =
                         window.DrawImage xform ball.img
                     )
 
-                    // Display FPS information
-                    let fpsText = sprintf "FPS: %d | Balls: %d" (1000 / deltaMS) balls.Length
+                    let fpsText = sprintf "FPS: %d | Balls: %d" (int (1000.0 / delta.TotalMilliseconds)) balls.Length
                     font.MakeText fpsText
                     |> fun t -> t.Draw window window.IdentityTransform
 
@@ -99,6 +86,5 @@ let Start() =
             Profiler.ProfileFrame("main_loop")
             logic window
 
-    // Start window logic loop
     window.Start(logic)
     Profiler.Dispose()
