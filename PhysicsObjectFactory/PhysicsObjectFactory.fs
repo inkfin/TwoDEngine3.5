@@ -54,11 +54,11 @@ module Factory =
         let radius = diameter / 2.0f
 
         let rec loop (remaining: int) (acc: Ball list) : Ball list =
-            if remaining = 0 then acc
+            if remaining = 0 then acc //If remaining = 0, then return the value of acc
             else
-                let pos = Vector2(float32 (random.Next(minX, maxX)), float32 (random.Next(minY, maxY)))
-                let tooClose = acc |> List.exists (fun b -> Vector2.Distance(b.pos, pos) < diameter)
-                if tooClose then loop remaining acc
+                let pos = Vector2(float32 (random.Next(minX, maxX)), float32 (random.Next(minY, maxY))) //randomly generate a position
+                let tooClose = acc |> List.exists (fun b -> Vector2.Distance(b.pos, pos) < diameter) //if ... exists in the list
+                if tooClose then loop remaining acc //call the function loop
                 else
                     let newBall: Ball = {
                         pos = pos
