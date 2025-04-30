@@ -16,7 +16,7 @@ open PhysicsObjectFactory
 open PhysicsObjectFactory.Factory
 open PhysicsSolver
 open Player
-open TracyProfiler
+open TracyProfilerFS
 
 let Start() =
     let graphics = ManagerUtils.TryGetManager<GraphicsManager> ()

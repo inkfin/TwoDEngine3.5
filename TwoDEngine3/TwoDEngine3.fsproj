@@ -23,6 +23,9 @@
         <Content Include="Assets\ballCollisionTest2.png">
           <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </Content>
+        <Content Include="Assets\ballCollisionTest4.png">
+          <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
         <Compile Include="ManagerUtils.fs" />
         <Compile Include="NewtonianObject.fs" />
         <Compile Include="AnimatedImage.fs" />
@@ -46,6 +49,7 @@
         <ProjectReference Include="..\InputManagerWinRawInput\InputManagerWinRawInput.fsproj" />
         <ProjectReference Include="..\PhysicsObjectFactory\PhysicsObjectFactory.fsproj" />
         <ProjectReference Include="..\SimpleCollisionManager\SimpleCollisionManager.fsproj" />
+        <ProjectReference Include="..\TracyProfilerFS\TracyProfilerFS.fsproj" />
     </ItemGroup>
 
 </Project>
